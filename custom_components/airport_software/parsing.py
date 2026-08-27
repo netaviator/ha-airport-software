@@ -30,3 +30,89 @@ _ERROR_DIV_RE = re.compile(r'<div id="ctl00_fehlertext" class="meldungen_err">')
 def login_failed(response_html: str) -> bool:
     """True if a login POST response is the login page re-rendered with an error."""
     return bool(_ERROR_DIV_RE.search(response_html))
+
+
+from .models import AircraftStatus
+
+_ROW_RE = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
+_CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
+_ZUSTAND_TABLE_RE = re.compile(
+    r'<div id="ctl00_MainContentPlaceHolder_divZustand">\s*<table[^>]*>(.*?)</table>\s*</div>',
+    re.DOTALL,
+)
+_INFO_COUNT_RE = re.compile(r"\((\d+)\s+Infos\)")
+_HOURS_RE = re.compile(r"(-?\d+):(\d+)")
+_TAG_RE = re.compile(r"<[^>]+>")
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+
+def _strip_tags(fragment: str) -> str:
+    """Strip HTML tags from a fragment that has no embedded fake tags.
+
+    Only safe to use on cells that don't contain tooltip onmouseover
+    attributes with literal <p> tags inside them (see the remaining-hours
+    cell, which uses _parse_remaining_hours instead for exactly this
+    reason).
+    """
+    fragment = _BR_RE.sub("\n", fragment)
+    fragment = _TAG_RE.sub("", fragment)
+    return html_module.unescape(fragment).strip()
+
+
+def _parse_remaining_hours(cell: str) -> float:
+    """Extract HH:MM from the remaining-hours cell.
+
+    Deliberately does NOT strip tags first: this cell's <a> tag carries an
+    onmouseover="...showTip('<p>...</p>')..." attribute containing literal,
+    unescaped <p> tags inside a JS string. A generic tag-stripper would stop
+    at the first '>' inside that attribute and mangle the result. Searching
+    directly for the digit:digit pattern sidesteps the problem entirely.
+    """
+    match = _HOURS_RE.search(cell)
+    if not match:
+        raise ValueError(f"could not parse remaining hours from cell: {cell!r}")
+    sign_str, minutes_str = match.groups()
+    negative = sign_str.startswith("-")
+    hours = int(sign_str.lstrip("-"))
+    total = hours + int(minutes_str) / 60
+    return -total if negative else total
+
+
+def _parse_row(row_html: str) -> AircraftStatus:
+    cells = _CELL_RE.findall(row_html)
+    if len(cells) != 5:
+        raise ValueError(f"expected 5 cells in status row, got {len(cells)}: {row_html!r}")
+
+    tail_number = _strip_tags(cells[0])
+    in_use = "key_out.png" in cells[1]
+
+    condition_text = _strip_tags(cells[2])
+    if condition_text.startswith("Wartung"):
+        condition = "maintenance"
+        open_info_count = 0
+    else:
+        condition = "ready"
+        info_match = _INFO_COUNT_RE.search(condition_text)
+        open_info_count = int(info_match.group(1)) if info_match else 0
+
+    remaining_hours = _parse_remaining_hours(cells[3])
+    remarks = _strip_tags(cells[4])
+
+    return AircraftStatus(
+        tail_number=tail_number,
+        in_use=in_use,
+        condition=condition,
+        open_info_count=open_info_count,
+        remaining_hours=remaining_hours,
+        remarks=remarks,
+    )
+
+
+def parse_status_table(page_html: str) -> list[AircraftStatus]:
+    """Parse the aircraft status table into a list of AircraftStatus."""
+    table_match = _ZUSTAND_TABLE_RE.search(page_html)
+    if not table_match:
+        raise ValueError("status table not found in page")
+    rows = _ROW_RE.findall(table_match.group(1))
+    data_rows = [row for row in rows if "<th" not in row]
+    return [_parse_row(row) for row in data_rows]
