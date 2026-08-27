@@ -1,14 +1,18 @@
+import datetime as dt
+
 import aiohttp
 import pytest
 from aioresponses import aioresponses
 
 from tests.conftest import load_fixture
 from custom_components.airport_software.client import AirportSoftwareClient, InvalidAuth
+from custom_components.airport_software.models import TowerDutyStatus
 
 BASE_URL = "https://example.test"
 LOGIN_URL = f"{BASE_URL}/login/login.aspx"
 OVERVIEW_URL = f"{BASE_URL}/internal/booking_overview.aspx"
 FLYNOW_URL = f"{BASE_URL}/internal/booking_flynow.aspx"
+KALENDER_URL = f"{BASE_URL}/internal/kalender.aspx"
 
 
 async def test_async_get_status_merges_overview_and_flynow_by_default():
@@ -138,3 +142,41 @@ async def test_async_get_status_relogs_in_when_session_expires():
             statuses = await client.async_get_status()
 
     assert len(statuses) == 4
+
+
+async def test_async_get_tower_duty_switches_calendar_type_if_needed():
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+    wrong_type_page = load_fixture("kalender_wrong_type.html")
+    correct_page = load_fixture("kalender.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(KALENDER_URL, body=wrong_type_page)
+        mocked.post(KALENDER_URL, body=correct_page)
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            result = await client.async_get_tower_duty(dt.datetime(2026, 1, 14, 10, 0))
+
+    assert result == TowerDutyStatus(on_duty="Mustermann, Erika", note=None)
+
+
+async def test_async_get_tower_duty_skips_switch_when_already_selected():
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+    correct_page = load_fixture("kalender.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(KALENDER_URL, body=correct_page)
+        # No POST to KALENDER_URL registered: if the client tried to switch
+        # calendar type anyway, aioresponses would raise, failing this test.
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            result = await client.async_get_tower_duty(dt.datetime(2026, 1, 14, 10, 0))
+
+    assert result == TowerDutyStatus(on_duty="Mustermann, Erika", note=None)

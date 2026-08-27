@@ -1,17 +1,26 @@
 """Stateful HTTP client for an airport-software instance."""
 from __future__ import annotations
 
+import datetime as dt
 from dataclasses import replace
 
 import aiohttp
 
-from .parsing import extract_hidden_fields, login_failed, parse_flynow_table, parse_status_table
-from .models import AircraftStatus
+from .parsing import (
+    extract_hidden_fields,
+    login_failed,
+    parse_flynow_table,
+    parse_status_table,
+    parse_tower_duty,
+)
+from .models import AircraftStatus, TowerDutyStatus
 
 _LOGIN_PATH = "/login/login.aspx"
 _OVERVIEW_PATH = "/internal/booking_overview.aspx"
 _FLYNOW_PATH = "/internal/booking_flynow.aspx"
+_KALENDER_PATH = "/internal/kalender.aspx"
 _LOGIN_MARKER = 'id="ctl00_MainContentPlaceHolder_txtUserName"'
+_FLUGLTG_SELECTED_MARKER = 'selected="selected" value="FLUGLTG"'
 
 _POST_FIELD_ORDER = [
     "__EVENTTARGET",
@@ -72,6 +81,28 @@ class AirportSoftwareClient:
             )
             for status in statuses
         ]
+
+    async def async_get_tower_duty(self, now: dt.datetime) -> TowerDutyStatus | None:
+        if self._auth_failed:
+            raise InvalidAuth("airport-software previously rejected these credentials")
+        if not self._authenticated:
+            await self._async_login()
+
+        page_html = await self._async_fetch_with_relogin(_KALENDER_PATH)
+
+        if _FLUGLTG_SELECTED_MARKER not in page_html:
+            page_html = await self._async_select_flugleitung_calendar(page_html)
+
+        return parse_tower_duty(page_html, now)
+
+    async def _async_select_flugleitung_calendar(self, page_html: str) -> str:
+        url = f"{self._base_url}{_KALENDER_PATH}"
+        fields = extract_hidden_fields(page_html)
+        fields["__EVENTTARGET"] = "ctl00$MainContentPlaceHolder$cmdPruefe"
+        fields["__EVENTARGUMENT"] = ""
+        fields["ctl00$MainContentPlaceHolder$lstKalender"] = "FLUGLTG"
+        async with self._session.post(url, data=fields) as response:
+            return await response.text()
 
     async def _async_fetch_with_relogin(self, path: str) -> str:
         """Fetch a page, re-authenticating once if the session has expired.
