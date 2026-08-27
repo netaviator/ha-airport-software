@@ -22,3 +22,11 @@ def extract_hidden_fields(page_html: str) -> dict[str, str]:
         value_match = _VALUE_RE.search(tag)
         fields[name_match.group(1)] = value_match.group(1) if value_match else ""
     return fields
+
+
+_ERROR_DIV_RE = re.compile(r'<div id="ctl00_fehlertext" class="meldungen_err">')
+
+
+def login_failed(response_html: str) -> bool:
+    """True if a login POST response is the login page re-rendered with an error."""
+    return bool(_ERROR_DIV_RE.search(response_html))
