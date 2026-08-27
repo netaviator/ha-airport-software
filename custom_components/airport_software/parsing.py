@@ -75,7 +75,7 @@ def _parse_remaining_hours(cell: str) -> float:
     sign_str, minutes_str = match.groups()
     negative = sign_str.startswith("-")
     hours = int(sign_str.lstrip("-"))
-    total = hours + int(minutes_str) / 60
+    total = round(hours + int(minutes_str) / 60, 2)
     return -total if negative else total
 
 

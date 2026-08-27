@@ -18,7 +18,7 @@ def test_parse_status_table_available_ready_no_infos():
     assert d_abcd.in_use is False
     assert d_abcd.condition == "ready"
     assert d_abcd.open_info_count == 0
-    assert d_abcd.remaining_hours == pytest.approx(82 + 5 / 60)
+    assert d_abcd.remaining_hours == pytest.approx(round(82 + 5 / 60, 2))
     assert d_abcd.remarks == "All good."
     assert d_abcd.available_from_today is None
     assert d_abcd.free_rest_of_day is False
@@ -31,7 +31,7 @@ def test_parse_status_table_in_use_with_infos_and_negative_hours():
     assert d_efgh.in_use is True
     assert d_efgh.condition == "ready"
     assert d_efgh.open_info_count == 3
-    assert d_efgh.remaining_hours == pytest.approx(-(11 + 25 / 60))
+    assert d_efgh.remaining_hours == pytest.approx(round(-(11 + 25 / 60), 2))
     assert d_efgh.remarks == "Minor issue.\n\nSecond line."
 
 
