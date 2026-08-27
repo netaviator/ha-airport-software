@@ -40,12 +40,31 @@ mean logging in more often, just fetching one or two extra pages per poll.
 
 ## Installation
 
-Via HACS: add this repository as a custom repository, install
-"airport-software", restart Home Assistant, then add the integration via
-Settings → Devices & Services and enter your club's base URL, member
-number, and password. Optionally adjust or disable the "free for the rest
-of the day" cutoff, tower duty, and qualification status features during
-setup.
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=netaviator&repository=ha-airport-software&category=integration)
+
+### Add the repository to HACS
+
+1. Click the badge above — it opens your Home Assistant instance with the
+   "Add custom repository" dialog already filled in (owner, repository, and
+   category), so you just need to confirm.
+2. If the badge doesn't work for you (e.g. My Home Assistant isn't linked
+   to this instance), add it manually instead:
+   - In Home Assistant, go to **HACS**.
+   - Click the **⋮** (three-dot) menu in the top right → **Custom
+     repositories**.
+   - Repository: `https://github.com/netaviator/ha-airport-software`
+   - Category: **Integration**
+   - Click **Add**.
+
+### Install and configure
+
+3. In HACS, search for **airport-software** and install it.
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & Services → Add Integration**, search for
+   "airport-software", and enter your club's base URL, member number, and
+   password.
+6. Optionally adjust or disable the "free for the rest of the day" cutoff,
+   tower duty, and qualification status features during setup.
 
 ## A note on credentials
 
