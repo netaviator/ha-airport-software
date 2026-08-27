@@ -106,13 +106,20 @@ just fly-mainz.de.
 custom_components/airport_software/
   manifest.json       # integration metadata, HACS-compatible
   const.py            # domain, defaults (poll interval, etc.)
-  models.py           # AircraftStatus (frozen dataclass)
-  client.py           # HTTP client: login, session mgmt, HTML parsing
-  coordinator.py       # DataUpdateCoordinator, polls client.py
+  models.py           # AircraftStatus, TowerDutyStatus, QualificationStatus
+  parsing.py           # pure-function HTML parsing, no I/O
+  client.py            # HTTP client: login, session mgmt, page fetches
+  coordinator.py       # 3 DataUpdateCoordinators: aircraft, tower duty, qualification
   config_flow.py       # setup UI + reauth flow
-  sensor.py             # condition + remaining_hours sensors
-  binary_sensor.py      # in_use binary sensor
+  sensor.py             # per-aircraft + tower duty + qualification sensors
+  binary_sensor.py      # in_use + free_rest_of_day binary sensors
 ```
+
+The tower-duty and qualification-status coordinators are separate from the
+aircraft coordinator because neither is per-aircraft data — but all three
+share one `AirportSoftwareClient` instance and one login session; enabling
+them doesn't mean logging in more often, just fetching extra pages per
+poll.
 
 Each aircraft (tail number) is registered as one HA device, grouping its
 entities.
@@ -213,6 +220,11 @@ entry (see "Tower duty right now" below):
 
 - `sensor.tower_duty_now` — on-duty name(s), `"none"`, or `unavailable`.
 
+Per logged-in member, only when the qualification-status feature is
+enabled for that config entry (see "Next-expiring qualification" below):
+
+- `sensor.next_expiring_qualification` — days remaining (can be negative).
+
 ## Testing
 
 Per TDD: write tests first for the two pure-logic units (field extraction +
@@ -266,6 +278,37 @@ the page, e.g. `"Rey, Elena"` or `"Christopher + Jonas"`), or `"none"` if
 today's row was found but no shift currently covers the time. If the fetched
 page doesn't even contain today's date (e.g. calendar navigation would be
 needed to reach it), the entity goes `unavailable` rather than guessing.
+
+## Next-expiring qualification (optional feature)
+
+A per-user (not per-aircraft, not club-wide — specific to the logged-in
+member) metric: how many days remain until their soonest-expiring license,
+medical certificate, or type rating. Derived from
+`/internal/mycode.aspx` ("Berechtigungsstatus"), a table
+(`#ctl00_MainContentPlaceHolder_grdAuswahl`) listing every qualification
+item with a label, start date, end date (`31.12.9999` meaning "never
+expires"), and a subcode. Among all items with a real (non-`9999`) end
+date, the one with the earliest end date is selected — this correctly
+surfaces an already-expired item too, not just future expirations, since an
+earlier date is still the numeric minimum.
+
+Severity is classified from the resulting days-remaining count using fixed
+thresholds (not user-configurable — specified as exact values):
+
+- `> 30` days remaining (or nothing ever expires): **ok**
+- `<= 30` days: **info**
+- `<= 14` days: **warning**
+- `< 0` days (already past due): **issue**
+
+Entity: `sensor.next_expiring_qualification` — state is the numeric days
+remaining (can be negative), with `label`, `subcode`, `end_date`, and
+`severity` as attributes. Controlled by a config-flow toggle,
+`enable_qualification_status` (default: on).
+
+Like tower duty, this is served by its own coordinator
+(`QualificationCoordinator`) sharing the same client/session — no separate
+login. Unlike tower duty, this page requires no calendar-type switching; it
+always shows the logged-in member's own data directly.
 
 ## Out of scope / explicit non-goals
 
