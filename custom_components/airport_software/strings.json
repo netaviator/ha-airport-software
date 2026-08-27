@@ -1,0 +1,56 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to airport-software",
+        "data": {
+          "base_url": "Base URL (e.g. https://fly-mainz.de)",
+          "username": "Member number",
+          "password": "Password",
+          "enable_free_rest_of_day": "Report \"free for the rest of the day\"",
+          "free_rest_of_day_cutoff": "Cutoff time (HH:MM) — ignore availability starting later than this",
+          "enable_tower_duty": "Report who's currently on tower (Flugleitung) duty",
+          "enable_qualification_status": "Report your next-expiring qualification/license item"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with airport-software",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid member number or password.",
+      "cannot_connect": "Could not reach the site. Check the base URL.",
+      "invalid_cutoff_format": "Cutoff time must be in HH:MM format, e.g. 18:00."
+    },
+    "abort": {
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "in_use": {
+        "name": "In use"
+      },
+      "free_rest_of_day": {
+        "name": "Free rest of day"
+      }
+    },
+    "sensor": {
+      "condition": {
+        "name": "Condition"
+      },
+      "remaining_hours": {
+        "name": "Remaining hours"
+      },
+      "tower_duty_now": {
+        "name": "Tower duty now"
+      },
+      "next_expiring_qualification": {
+        "name": "Next expiring qualification"
+      }
+    }
+  }
+}

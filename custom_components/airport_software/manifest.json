@@ -1,0 +1,12 @@
+{
+  "domain": "airport_software",
+  "name": "airport-software",
+  "codeowners": ["@jgilla"],
+  "config_flow": true,
+  "documentation": "https://github.com/jgilla/ha-airport-software",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/jgilla/ha-airport-software/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}
