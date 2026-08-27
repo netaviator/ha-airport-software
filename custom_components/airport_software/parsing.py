@@ -116,3 +116,60 @@ def parse_status_table(page_html: str) -> list[AircraftStatus]:
     rows = _ROW_RE.findall(table_match.group(1))
     data_rows = [row for row in rows if "<th" not in row]
     return [_parse_row(row) for row in data_rows]
+
+
+_FLYNOW_TABLE_RE = re.compile(
+    r'<div id="ctl00_MainContentPlaceHolder_divBookingList">\s*<table[^>]*>(.*?)</table>\s*</div>',
+    re.DOTALL,
+)
+_IMMEDIATE_MARKER = "Sofort"
+_END_OF_DAY_MARKER = "Ende des Tages"
+
+
+def _time_to_minutes(value: str) -> int:
+    hours_str, minutes_str = value.split(":")
+    return int(hours_str) * 60 + int(minutes_str)
+
+
+def parse_flynow_table(
+    page_html: str, cutoff: str = "18:00"
+) -> dict[str, tuple[str, bool]]:
+    """Parse booking_flynow.aspx into {tail_number: (available_from_today, free_rest_of_day)}.
+
+    Aircraft with no open slot for the rest of the day are simply absent
+    from the source table, and therefore absent from this result — callers
+    must treat a missing tail number as (None, False).
+
+    free_rest_of_day is True only when the aircraft has no later booking
+    today ("Verfuegbar bis" == "Ende des Tages") AND its available-from
+    time is at or before `cutoff` ("Sofort" always counts as before cutoff).
+    """
+    cutoff_minutes = _time_to_minutes(cutoff)
+
+    table_match = _FLYNOW_TABLE_RE.search(page_html)
+    if not table_match:
+        raise ValueError("flynow table not found in page")
+    rows = _ROW_RE.findall(table_match.group(1))
+    data_rows = [row for row in rows if "<th" not in row]
+
+    result: dict[str, tuple[str, bool]] = {}
+    for row in data_rows:
+        cells = _CELL_RE.findall(row)
+        if len(cells) != 4:
+            raise ValueError(f"expected 4 cells in flynow row, got {len(cells)}: {row!r}")
+
+        tail_number = _strip_tags(cells[0])
+        available_from_text = _strip_tags(cells[1])
+        available_until_text = _strip_tags(cells[2])
+
+        free_until_end_of_day = available_until_text == _END_OF_DAY_MARKER
+        if available_from_text == _IMMEDIATE_MARKER:
+            available_from_today = "immediate"
+            within_cutoff = True
+        else:
+            available_from_today = available_from_text
+            within_cutoff = _time_to_minutes(available_from_text) <= cutoff_minutes
+
+        result[tail_number] = (available_from_today, free_until_end_of_day and within_cutoff)
+
+    return result
