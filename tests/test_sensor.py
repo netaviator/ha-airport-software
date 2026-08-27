@@ -92,6 +92,25 @@ async def test_tower_duty_sensor_absent_when_disabled(hass):
     assert hass.states.get("sensor.tower_duty_now") is None
 
 
+async def test_qualification_sensor_absent_when_disabled(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={**ENTRY_DATA, "enable_qualification_status": False}
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.airport_software.client.AirportSoftwareClient.async_get_status",
+        return_value=[],
+    ), patch(
+        "custom_components.airport_software.client.AirportSoftwareClient.async_get_tower_duty",
+        return_value=None,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert hass.states.get("sensor.next_expiring_qualification") is None
+
+
 async def test_qualification_sensor_reports_days_remaining_and_severity(hass):
     qualification = QualificationStatus(
         label="Medical Class II",

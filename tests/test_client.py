@@ -3,6 +3,7 @@ import datetime as dt
 import aiohttp
 import pytest
 from aioresponses import aioresponses
+from yarl import URL as YarlURL
 
 from tests.conftest import load_fixture
 from custom_components.airport_software.client import AirportSoftwareClient, InvalidAuth
@@ -145,6 +146,32 @@ async def test_async_get_status_relogs_in_when_session_expires():
     assert len(statuses) == 4
 
 
+async def test_async_login_sends_correct_eventtarget_and_omits_cmdlogin():
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+    overview_page = load_fixture("booking_overview.html")
+    flynow_page = load_fixture("booking_flynow.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(OVERVIEW_URL, body=overview_page)
+        mocked.get(FLYNOW_URL, body=flynow_page)
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            await client.async_get_status()
+
+        requests_made = mocked.requests[("POST", YarlURL(LOGIN_URL))]
+        sent_data = requests_made[0].kwargs["data"]
+
+    assert sent_data["__EVENTTARGET"] == "ctl00$MainContentPlaceHolder$cmdLogin"
+    assert sent_data["__EVENTARGUMENT"] == ""
+    assert sent_data["ctl00$MainContentPlaceHolder$txtUserName"] == "1234"
+    assert sent_data["ctl00$MainContentPlaceHolder$txtPassword"] == "secret"
+    assert "ctl00$MainContentPlaceHolder$cmdLogin" not in sent_data
+
+
 async def test_async_get_tower_duty_switches_calendar_type_if_needed():
     login_page = load_fixture("login_page.html")
     login_success = load_fixture("login_response_success.html")
@@ -197,5 +224,7 @@ async def test_async_get_next_expiring_qualification_returns_parsed_result():
             client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
             result = await client.async_get_next_expiring_qualification(dt.date(2026, 1, 1))
 
-    assert result.label == "Medical Class II"
+    # mycode.html has two real end dates now ("Nachtflug" 08.03.2026 and
+    # "Medical Class II" 20.03.2026); the earlier one always wins.
+    assert result.label == "Nachtflug"
     assert result.severity == "ok"
