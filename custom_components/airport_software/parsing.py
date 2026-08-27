@@ -3,8 +3,11 @@
 No network I/O lives here — client.py owns the HTTP layer and calls
 into these functions with already-fetched response bodies.
 """
+import datetime as dt
 import html as html_module
 import re
+
+from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
 
 _HIDDEN_FIELD_RE = re.compile(r'<input[^>]*type="hidden"[^>]*>')
 _NAME_RE = re.compile(r'name="([^"]+)"')
@@ -32,15 +35,13 @@ def login_failed(response_html: str) -> bool:
     return bool(_ERROR_DIV_RE.search(response_html))
 
 
-from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
-
-_ROW_RE = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
+_ROW_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL)
 _CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
 _ZUSTAND_TABLE_RE = re.compile(
     r'<div id="ctl00_MainContentPlaceHolder_divZustand">\s*<table[^>]*>(.*?)</table>\s*</div>',
     re.DOTALL,
 )
-_INFO_COUNT_RE = re.compile(r"\((\d+)\s+Infos\)")
+_INFO_COUNT_RE = re.compile(r"\((\d+)\s+Infos?\)")
 _HOURS_RE = re.compile(r"(-?\d+):(\d+)")
 _TAG_RE = re.compile(r"<[^>]+>")
 _BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
@@ -174,8 +175,6 @@ def parse_flynow_table(
 
     return result
 
-
-import datetime as dt
 
 _GERMAN_MONTHS = {
     "Januar": 1, "Februar": 2, "März": 3, "April": 4, "Mai": 5, "Juni": 6,

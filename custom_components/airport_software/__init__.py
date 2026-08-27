@@ -40,7 +40,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         free_rest_of_day_cutoff=entry.data[CONF_FREE_REST_OF_DAY_CUTOFF],
     )
     coordinator = AirportSoftwareCoordinator(hass, entry, client)
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except Exception:
+        await session.close()
+        raise
 
     # Both of these are optional, "fun" side features (not per-aircraft
     # data): a failure fetching them on startup shouldn't block the whole

@@ -3,8 +3,16 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.airport_software.client import InvalidAuth
-from custom_components.airport_software.coordinator import AirportSoftwareCoordinator
-from custom_components.airport_software.models import AircraftStatus
+from custom_components.airport_software.coordinator import (
+    AirportSoftwareCoordinator,
+    QualificationCoordinator,
+    TowerDutyCoordinator,
+)
+from custom_components.airport_software.models import (
+    AircraftStatus,
+    QualificationStatus,
+    TowerDutyStatus,
+)
 
 
 class _FakeClient:
@@ -53,10 +61,6 @@ async def test_update_data_raises_update_failed_on_network_error(hass):
         await coordinator._async_update_data()
 
 
-from custom_components.airport_software.coordinator import TowerDutyCoordinator
-from custom_components.airport_software.models import TowerDutyStatus
-
-
 class _FakeTowerDutyClient:
     def __init__(self, result=None, exc=None):
         self._result = result
@@ -90,10 +94,6 @@ async def test_tower_duty_update_data_raises_update_failed_on_network_error(hass
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
-
-
-from custom_components.airport_software.coordinator import QualificationCoordinator
-from custom_components.airport_software.models import QualificationStatus
 
 
 class _FakeQualificationClient:

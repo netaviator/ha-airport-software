@@ -131,6 +131,10 @@ class AirportSoftwareClient:
         if self._looks_like_login_page(page_html):
             await self._async_login()
             page_html = await self._async_fetch(path)
+            if self._looks_like_login_page(page_html):
+                self._authenticated = False
+                self._auth_failed = True
+                raise InvalidAuth("still bounced to login after re-authenticating")
         return page_html
 
     async def _async_fetch(self, path: str) -> str:
@@ -154,6 +158,10 @@ class AirportSoftwareClient:
         fields["ctl00$MainContentPlaceHolder$txtUserName"] = self._username
         fields["ctl00$MainContentPlaceHolder$txtPassword"] = self._password
         fields.pop("ctl00$MainContentPlaceHolder$cmdLogin", None)
+
+        missing = [key for key in _POST_FIELD_ORDER if key not in fields]
+        if missing:
+            raise ValueError(f"login page missing expected fields: {missing}")
 
         body = {key: fields[key] for key in _POST_FIELD_ORDER}
 

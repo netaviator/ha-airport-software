@@ -24,10 +24,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def pytest_configure(config):
-    """Configure pytest and ensure sys.path includes the repo root."""
-    sys.path.insert(0, str(REPO_ROOT))
-
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
