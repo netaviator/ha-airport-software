@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from .client import AirportSoftwareClient, InvalidAuth
 from .const import DOMAIN, POLL_INTERVAL_SECONDS
-from .models import AircraftStatus, TowerDutyStatus
+from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -64,6 +64,33 @@ class TowerDutyCoordinator(DataUpdateCoordinator[TowerDutyStatus | None]):
     async def _async_update_data(self) -> TowerDutyStatus | None:
         try:
             return await self._client.async_get_tower_duty(dt_util.now())
+        except InvalidAuth as err:
+            raise ConfigEntryAuthFailed(
+                "airport-software rejected the configured credentials"
+            ) from err
+        except Exception as err:
+            raise UpdateFailed(f"error communicating with airport-software: {err}") from err
+
+
+class QualificationCoordinator(DataUpdateCoordinator[QualificationStatus | None]):
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry | None,
+        client: AirportSoftwareClient,
+    ) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_qualification",
+            update_interval=timedelta(seconds=POLL_INTERVAL_SECONDS),
+        )
+        self.config_entry = entry
+        self._client = client
+
+    async def _async_update_data(self) -> QualificationStatus | None:
+        try:
+            return await self._client.async_get_next_expiring_qualification(dt_util.now().date())
         except InvalidAuth as err:
             raise ConfigEntryAuthFailed(
                 "airport-software rejected the configured credentials"

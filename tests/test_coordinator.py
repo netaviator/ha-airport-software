@@ -90,3 +90,48 @@ async def test_tower_duty_update_data_raises_update_failed_on_network_error(hass
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+from custom_components.airport_software.coordinator import QualificationCoordinator
+from custom_components.airport_software.models import QualificationStatus
+
+
+class _FakeQualificationClient:
+    def __init__(self, result=None, exc=None):
+        self._result = result
+        self._exc = exc
+
+    async def async_get_next_expiring_qualification(self, today):
+        if self._exc is not None:
+            raise self._exc
+        return self._result
+
+
+async def test_qualification_update_data_returns_client_result(hass):
+    qualification = QualificationStatus(
+        label="Medical Class II",
+        subcode="MEDICAL - CLASS II",
+        end_date="2026-03-20",
+        days_remaining=78,
+        severity="ok",
+    )
+    client = _FakeQualificationClient(result=qualification)
+    coordinator = QualificationCoordinator(hass, entry=None, client=client)
+
+    assert await coordinator._async_update_data() == qualification
+
+
+async def test_qualification_update_data_raises_config_entry_auth_failed_on_invalid_auth(hass):
+    client = _FakeQualificationClient(exc=InvalidAuth("bad password"))
+    coordinator = QualificationCoordinator(hass, entry=None, client=client)
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_update_data()
+
+
+async def test_qualification_update_data_raises_update_failed_on_network_error(hass):
+    client = _FakeQualificationClient(exc=ConnectionError("boom"))
+    coordinator = QualificationCoordinator(hass, entry=None, client=client)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
