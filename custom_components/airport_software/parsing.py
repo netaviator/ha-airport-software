@@ -32,7 +32,7 @@ def login_failed(response_html: str) -> bool:
     return bool(_ERROR_DIV_RE.search(response_html))
 
 
-from .models import AircraftStatus, TowerDutyStatus
+from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
 
 _ROW_RE = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
 _CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
@@ -255,3 +255,71 @@ def parse_tower_duty(page_html: str, now: dt.datetime) -> TowerDutyStatus | None
         return TowerDutyStatus(on_duty=None, note=None)
 
     return None
+
+
+_QUALIFICATION_TABLE_RE = re.compile(
+    r'<table[^>]*id="ctl00_MainContentPlaceHolder_grdAuswahl"[^>]*>(.*?)</table>',
+    re.DOTALL,
+)
+_NEVER_EXPIRES = dt.date(9999, 12, 31)
+_INFO_THRESHOLD_DAYS = 30
+_WARNING_THRESHOLD_DAYS = 14
+
+
+def _parse_german_date(value: str) -> dt.date:
+    day, month, year = value.split(".")
+    return dt.date(int(year), int(month), int(day))
+
+
+def _classify_severity(days_remaining: int | None) -> str:
+    if days_remaining is None:
+        return "ok"
+    if days_remaining < 0:
+        return "issue"
+    if days_remaining <= _WARNING_THRESHOLD_DAYS:
+        return "warning"
+    if days_remaining <= _INFO_THRESHOLD_DAYS:
+        return "info"
+    return "ok"
+
+
+def parse_qualification_status(page_html: str, today: dt.date) -> QualificationStatus | None:
+    """The soonest-expiring (or already-expired) qualification/license item.
+
+    Returns None if the qualification table isn't present in the page at
+    all (parse failure). Returns a QualificationStatus with every field
+    None (except severity="ok") if the table is present but every entry
+    never expires (Ende == 31.12.9999).
+    """
+    table_match = _QUALIFICATION_TABLE_RE.search(page_html)
+    if not table_match:
+        return None
+
+    candidates: list[tuple[dt.date, str, str]] = []
+    for row in _ROW_RE.findall(table_match.group(1)):
+        if "<th" in row:
+            continue
+        cells = _CELL_RE.findall(row)
+        if len(cells) != 5:
+            continue
+        label = _strip_tags(cells[0])
+        end_date = _parse_german_date(_strip_tags(cells[2]))
+        subcode = _strip_tags(cells[4])
+        if end_date == _NEVER_EXPIRES:
+            continue
+        candidates.append((end_date, label, subcode))
+
+    if not candidates:
+        return QualificationStatus(
+            label=None, subcode=None, end_date=None, days_remaining=None, severity="ok"
+        )
+
+    end_date, label, subcode = min(candidates, key=lambda c: c[0])
+    days_remaining = (end_date - today).days
+    return QualificationStatus(
+        label=label,
+        subcode=subcode,
+        end_date=end_date.isoformat(),
+        days_remaining=days_remaining,
+        severity=_classify_severity(days_remaining),
+    )

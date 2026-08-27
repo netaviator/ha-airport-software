@@ -19,3 +19,12 @@ class AircraftStatus:
 class TowerDutyStatus:
     on_duty: str | None
     note: str | None = None
+
+
+@dataclass(frozen=True)
+class QualificationStatus:
+    label: str | None
+    subcode: str | None
+    end_date: str | None
+    days_remaining: int | None
+    severity: Literal["ok", "info", "warning", "issue"]
