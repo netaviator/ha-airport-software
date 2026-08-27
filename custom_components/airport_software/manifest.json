@@ -1,6 +1,6 @@
 {
   "domain": "airport_software",
-  "name": "airport-software",
+  "name": "airport-software Integration",
   "codeowners": ["@netaviator"],
   "config_flow": true,
   "documentation": "https://github.com/netaviator/ha-airport-software",
