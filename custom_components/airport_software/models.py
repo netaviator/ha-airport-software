@@ -13,3 +13,9 @@ class AircraftStatus:
     remarks: str
     available_from_today: str | None = None
     free_rest_of_day: bool = False
+
+
+@dataclass(frozen=True)
+class TowerDutyStatus:
+    on_duty: str | None
+    note: str | None = None

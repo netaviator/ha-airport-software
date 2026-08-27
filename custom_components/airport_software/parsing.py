@@ -32,7 +32,7 @@ def login_failed(response_html: str) -> bool:
     return bool(_ERROR_DIV_RE.search(response_html))
 
 
-from .models import AircraftStatus
+from .models import AircraftStatus, TowerDutyStatus
 
 _ROW_RE = re.compile(r"<tr>(.*?)</tr>", re.DOTALL)
 _CELL_RE = re.compile(r"<td[^>]*>(.*?)</td>", re.DOTALL)
@@ -173,3 +173,85 @@ def parse_flynow_table(
         result[tail_number] = (available_from_today, free_until_end_of_day and within_cutoff)
 
     return result
+
+
+import datetime as dt
+
+_GERMAN_MONTHS = {
+    "Januar": 1, "Februar": 2, "März": 3, "April": 4, "Mai": 5, "Juni": 6,
+    "Juli": 7, "August": 8, "September": 9, "Oktober": 10, "November": 11, "Dezember": 12,
+}
+_KALENDER_HEADER_RE = re.compile(r"Kalender: Flugleitung (\w+) (\d{4})")
+_KALENDER_TABLE_RE = re.compile(
+    r'<div id="ctl00_MainContentPlaceHolder_divKalenderList">\s*<table[^>]*>(.*?)</table>\s*</div>',
+    re.DOTALL,
+)
+_DAY_HEADER_RE = re.compile(r"<th[^>]*>[^,<]*,\s*(\d{1,2})</th>")
+_TIME_RANGE_RE = re.compile(r"(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})")
+_TOOLTIP_NOTE_RE = re.compile(r"boxcontent\\'>([^<]*)<")
+
+
+def _clean_duty_name(cell: str) -> str:
+    """Extract the plain name text preceding any tooltip <a> link.
+
+    Cells can look like "Beispiel, Max  <a ...tooltip markup...>" where the
+    tooltip's onmouseover attribute contains literal, unescaped <p> tags —
+    the same quirk as the remaining-hours cell in the overview table — so
+    this takes everything before the <a rather than stripping all tags.
+    """
+    before_link = re.split(r"<a\s", cell)[0]
+    return html_module.unescape(before_link).strip()
+
+
+def _extract_duty_note(cell: str) -> str | None:
+    match = _TOOLTIP_NOTE_RE.search(cell)
+    return html_module.unescape(match.group(1)).strip() if match else None
+
+
+def parse_tower_duty(page_html: str, now: dt.datetime) -> TowerDutyStatus | None:
+    """Who is on Flugleitung (tower) duty at `now`."""
+    header_match = _KALENDER_HEADER_RE.search(page_html)
+    if not header_match:
+        return None
+    month = _GERMAN_MONTHS.get(header_match.group(1))
+    year = int(header_match.group(2))
+    if month is None:
+        return None
+
+    table_match = _KALENDER_TABLE_RE.search(page_html)
+    if not table_match:
+        return None
+
+    for row in _ROW_RE.findall(table_match.group(1)):
+        day_match = _DAY_HEADER_RE.search(row)
+        if not day_match:
+            continue
+        try:
+            row_date = dt.date(year, month, int(day_match.group(1)))
+        except ValueError:
+            continue
+        if row_date != now.date():
+            continue
+
+        cells = _CELL_RE.findall(row)
+        for i in range(0, len(cells) - 1, 2):
+            time_match = _TIME_RANGE_RE.search(cells[i])
+            if not time_match:
+                continue
+            start_h, start_m, end_h, end_m = (int(g) for g in time_match.groups())
+            start = dt.time(start_h, start_m)
+            current = now.time()
+            in_window = (
+                current >= start
+                if end_h == 24
+                else start <= current <= dt.time(end_h, end_m)
+            )
+            if in_window:
+                name_cell = cells[i + 1]
+                return TowerDutyStatus(
+                    on_duty=_clean_duty_name(name_cell),
+                    note=_extract_duty_note(name_cell),
+                )
+        return TowerDutyStatus(on_duty=None, note=None)
+
+    return None
