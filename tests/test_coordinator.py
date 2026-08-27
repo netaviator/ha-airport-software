@@ -51,3 +51,42 @@ async def test_update_data_raises_update_failed_on_network_error(hass):
 
     with pytest.raises(UpdateFailed):
         await coordinator._async_update_data()
+
+
+from custom_components.airport_software.coordinator import TowerDutyCoordinator
+from custom_components.airport_software.models import TowerDutyStatus
+
+
+class _FakeTowerDutyClient:
+    def __init__(self, result=None, exc=None):
+        self._result = result
+        self._exc = exc
+
+    async def async_get_tower_duty(self, now):
+        if self._exc is not None:
+            raise self._exc
+        return self._result
+
+
+async def test_tower_duty_update_data_returns_client_result(hass):
+    duty = TowerDutyStatus(on_duty="Rey, Elena", note=None)
+    client = _FakeTowerDutyClient(result=duty)
+    coordinator = TowerDutyCoordinator(hass, entry=None, client=client)
+
+    assert await coordinator._async_update_data() == duty
+
+
+async def test_tower_duty_update_data_raises_config_entry_auth_failed_on_invalid_auth(hass):
+    client = _FakeTowerDutyClient(exc=InvalidAuth("bad password"))
+    coordinator = TowerDutyCoordinator(hass, entry=None, client=client)
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_update_data()
+
+
+async def test_tower_duty_update_data_raises_update_failed_on_network_error(hass):
+    client = _FakeTowerDutyClient(exc=ConnectionError("boom"))
+    coordinator = TowerDutyCoordinator(hass, entry=None, client=client)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
