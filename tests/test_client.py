@@ -6,13 +6,14 @@ from aioresponses import aioresponses
 
 from tests.conftest import load_fixture
 from custom_components.airport_software.client import AirportSoftwareClient, InvalidAuth
-from custom_components.airport_software.models import TowerDutyStatus
+from custom_components.airport_software.models import TowerDutyStatus, QualificationStatus
 
 BASE_URL = "https://example.test"
 LOGIN_URL = f"{BASE_URL}/login/login.aspx"
 OVERVIEW_URL = f"{BASE_URL}/internal/booking_overview.aspx"
 FLYNOW_URL = f"{BASE_URL}/internal/booking_flynow.aspx"
 KALENDER_URL = f"{BASE_URL}/internal/kalender.aspx"
+MYCODE_URL = f"{BASE_URL}/internal/mycode.aspx"
 
 
 async def test_async_get_status_merges_overview_and_flynow_by_default():
@@ -180,3 +181,21 @@ async def test_async_get_tower_duty_skips_switch_when_already_selected():
             result = await client.async_get_tower_duty(dt.datetime(2026, 1, 14, 10, 0))
 
     assert result == TowerDutyStatus(on_duty="Mustermann, Erika", note=None)
+
+
+async def test_async_get_next_expiring_qualification_returns_parsed_result():
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+    mycode_page = load_fixture("mycode.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(MYCODE_URL, body=mycode_page)
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            result = await client.async_get_next_expiring_qualification(dt.date(2026, 1, 1))
+
+    assert result.label == "Medical Class II"
+    assert result.severity == "ok"

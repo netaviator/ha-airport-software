@@ -10,15 +10,17 @@ from .parsing import (
     extract_hidden_fields,
     login_failed,
     parse_flynow_table,
+    parse_qualification_status,
     parse_status_table,
     parse_tower_duty,
 )
-from .models import AircraftStatus, TowerDutyStatus
+from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
 
 _LOGIN_PATH = "/login/login.aspx"
 _OVERVIEW_PATH = "/internal/booking_overview.aspx"
 _FLYNOW_PATH = "/internal/booking_flynow.aspx"
 _KALENDER_PATH = "/internal/kalender.aspx"
+_MYCODE_PATH = "/internal/mycode.aspx"
 _LOGIN_MARKER = 'id="ctl00_MainContentPlaceHolder_txtUserName"'
 _FLUGLTG_SELECTED_MARKER = 'selected="selected" value="FLUGLTG"'
 
@@ -94,6 +96,17 @@ class AirportSoftwareClient:
             page_html = await self._async_select_flugleitung_calendar(page_html)
 
         return parse_tower_duty(page_html, now)
+
+    async def async_get_next_expiring_qualification(
+        self, today: dt.date
+    ) -> QualificationStatus | None:
+        if self._auth_failed:
+            raise InvalidAuth("airport-software previously rejected these credentials")
+        if not self._authenticated:
+            await self._async_login()
+
+        page_html = await self._async_fetch_with_relogin(_MYCODE_PATH)
+        return parse_qualification_status(page_html, today)
 
     async def _async_select_flugleitung_calendar(self, page_html: str) -> str:
         url = f"{self._base_url}{_KALENDER_PATH}"
