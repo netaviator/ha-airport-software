@@ -135,10 +135,8 @@ in the loop to notice and stop on a lockout warning). Implements
 Per aircraft:
 
 - `binary_sensor.<tail>_in_use` — on = checked out, off = available.
-- `sensor.<tail>_condition` — state `ready`/`maintenance`, attribute
-  `remarks`.
-- `sensor.<tail>_open_info_count` — numeric, count of open info/defect notes
-  linked from the "Zustand" column (0 when none).
+- `sensor.<tail>_condition` — state `ready`/`maintenance`, attributes
+  `open_info_count`, `remarks`.
 - `sensor.<tail>_remaining_hours` — numeric (hours), can be negative.
 
 ## Testing
