@@ -208,6 +208,11 @@ config entry:
   day per the logic above, with `available_from` (the raw
   `available_from_today` value) as an attribute.
 
+Club-wide, only when the tower-duty feature is enabled for that config
+entry (see "Tower duty right now" below):
+
+- `sensor.tower_duty_now` — on-duty name(s), `"none"`, or `unavailable`.
+
 ## Testing
 
 Per TDD: write tests first for the two pure-logic units (field extraction +
@@ -223,6 +228,44 @@ HTML table parsing) before their implementations.
   (documented in the plan/README), not a repeatable test.
 - Coordinator/config-flow tests use a fake client (mock), not the real HTTP
   layer.
+
+## Tower duty right now (optional feature)
+
+A club-wide (not per-aircraft) metric: who is currently on Flugleitung
+(tower/flight-control) duty. Derived from `/internal/kalender.aspx`, which
+serves several different calendar types via a dropdown (`lstKalender`),
+defaulting to `FLUGLTG` (Flugleitung) — the client explicitly selects it via
+a postback if it isn't already selected, rather than assuming the default.
+
+The page's `#ctl00_MainContentPlaceHolder_divKalenderList` table has one row
+per day (day-of-month, taken with the month/year parsed from the page's own
+"Kalender: Flugleitung `<Month>` `<Year>`" header), each row containing 1 or
+more shift blocks as `(time range, name)` pairs — e.g. `08:00 - 12:00` /
+`Christopher`, `12:00 - 20:00` / `Rey, Elena`. A shift can be covered by
+multiple people (plain text like `Christopher + Jonas`) and can carry a
+tooltip caveat (e.g. "until 14:00" for partial coverage), which is retained
+as a `note` alongside the name(s).
+
+This is inherently "now"-dependent (unlike the flynow cutoff, which is a
+static comparison): the coordinator resolves who's on duty using the actual
+current time (`homeassistant.util.dt.now()`) each poll. Given the 15-minute
+poll interval, there's a small lag around shift-change boundaries (up to 15
+minutes before the entity reflects a shift change) — an accepted trade-off
+for this optional, informational feature rather than justifying independent
+faster polling.
+
+Because this data isn't about any aircraft, it's served by a **second,
+independent coordinator** (`TowerDutyCoordinator`) sharing the *same*
+`AirportSoftwareClient` instance and login session as the aircraft
+coordinator — not a second login, just a second periodic fetch. A single
+config-flow toggle, `enable_tower_duty` (default: on), controls whether this
+coordinator and its entity exist at all for a given config entry.
+
+Entity: `sensor.tower_duty_now` — state is the on-duty name(s) (as shown on
+the page, e.g. `"Rey, Elena"` or `"Christopher + Jonas"`), or `"none"` if
+today's row was found but no shift currently covers the time. If the fetched
+page doesn't even contain today's date (e.g. calendar navigation would be
+needed to reach it), the entity goes `unavailable` rather than guessing.
 
 ## Out of scope / explicit non-goals
 
