@@ -132,6 +132,13 @@ def _time_to_minutes(value: str) -> int:
     return int(hours_str) * 60 + int(minutes_str)
 
 
+def _from_sort_key(available_from_text: str) -> int:
+    """Sort key for a 'Verfuegbar ab' value, with 'Sofort' earliest of all."""
+    if available_from_text == _IMMEDIATE_MARKER:
+        return -1
+    return _time_to_minutes(available_from_text)
+
+
 def parse_flynow_table(
     page_html: str, cutoff: str = "18:00"
 ) -> dict[str, tuple[str, bool]]:
@@ -141,9 +148,16 @@ def parse_flynow_table(
     from the source table, and therefore absent from this result — callers
     must treat a missing tail number as (None, False).
 
-    free_rest_of_day is True only when the aircraft has no later booking
-    today ("Verfuegbar bis" == "Ende des Tages") AND its available-from
-    time is at or before `cutoff` ("Sofort" always counts as before cutoff).
+    An aircraft can appear as multiple rows (multiple open slots today,
+    separated by a booking in between). free_rest_of_day is True only when
+    EVERY one of its slots ends at "Ende des Tages" (in practice, exactly
+    one slot) AND that slot's available-from time is at or before `cutoff`
+    ("Sofort" always counts as before cutoff). Any slot with a specific end
+    time means a booking exists later today, so the aircraft is not free
+    for the *rest* of the day even if a later slot also runs to end of day.
+
+    available_from_today is always the earliest available-from time across
+    all of that aircraft's slots today, regardless of free_rest_of_day.
     """
     cutoff_minutes = _time_to_minutes(cutoff)
 
@@ -153,7 +167,7 @@ def parse_flynow_table(
     rows = _ROW_RE.findall(table_match.group(1))
     data_rows = [row for row in rows if "<th" not in row]
 
-    result: dict[str, tuple[str, bool]] = {}
+    slots_by_tail: dict[str, list[tuple[str, str]]] = {}
     for row in data_rows:
         cells = _CELL_RE.findall(row)
         if len(cells) != 4:
@@ -162,16 +176,29 @@ def parse_flynow_table(
         tail_number = _strip_tags(cells[0])
         available_from_text = _strip_tags(cells[1])
         available_until_text = _strip_tags(cells[2])
+        slots_by_tail.setdefault(tail_number, []).append(
+            (available_from_text, available_until_text)
+        )
 
-        free_until_end_of_day = available_until_text == _END_OF_DAY_MARKER
-        if available_from_text == _IMMEDIATE_MARKER:
-            available_from_today = "immediate"
-            within_cutoff = True
+    result: dict[str, tuple[str, bool]] = {}
+    for tail_number, slots in slots_by_tail.items():
+        earliest_from_text = min(slots, key=lambda slot: _from_sort_key(slot[0]))[0]
+        available_from_today = (
+            "immediate" if earliest_from_text == _IMMEDIATE_MARKER else earliest_from_text
+        )
+
+        has_gap = any(until != _END_OF_DAY_MARKER for _, until in slots)
+        if has_gap:
+            free_rest_of_day = False
         else:
-            available_from_today = available_from_text
-            within_cutoff = _time_to_minutes(available_from_text) <= cutoff_minutes
+            eod_from_text = slots[0][0]
+            within_cutoff = (
+                eod_from_text == _IMMEDIATE_MARKER
+                or _time_to_minutes(eod_from_text) <= cutoff_minutes
+            )
+            free_rest_of_day = within_cutoff
 
-        result[tail_number] = (available_from_today, free_until_end_of_day and within_cutoff)
+        result[tail_number] = (available_from_today, free_rest_of_day)
 
     return result
 
