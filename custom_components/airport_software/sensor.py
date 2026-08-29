@@ -99,6 +99,16 @@ class TowerDutyNowSensor(CoordinatorEntity[TowerDutyCoordinator], SensorEntity):
         self._attr_unique_id = f"{entry_id}_tower_duty_now"
 
     @property
+    def available(self) -> bool:
+        """Keep showing the last known value through a transient failed poll.
+
+        Only unavailable before the first-ever successful fetch — after
+        that, a failed update (e.g. a parse hiccup) leaves coordinator.data
+        untouched, so we keep displaying it rather than going blank.
+        """
+        return self.coordinator.data is not None
+
+    @property
     def native_value(self) -> str | None:
         duty = self.coordinator.data
         if duty is None:
@@ -123,6 +133,16 @@ class NextExpiringQualificationSensor(
     def __init__(self, coordinator: QualificationCoordinator, entry_id: str) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry_id}_next_expiring_qualification"
+
+    @property
+    def available(self) -> bool:
+        """Keep showing the last known value through a transient failed poll.
+
+        Only unavailable before the first-ever successful fetch — after
+        that, a failed update (e.g. a parse hiccup) leaves coordinator.data
+        untouched, so we keep displaying it rather than going blank.
+        """
+        return self.coordinator.data is not None
 
     @property
     def native_value(self) -> int | None:

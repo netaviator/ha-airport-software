@@ -24,15 +24,19 @@ them):
   past the cutoff.
 - `sensor.tower_duty_now` — who's currently on Flugleitung (tower) duty,
   club-wide (not per-aircraft), resolved from the tower duty calendar.
-  State is the on-duty name(s), `"none"` if today's schedule has a gap
-  right now, or `unavailable` if today's date couldn't even be found on the
-  fetched calendar page. A `note` attribute carries any partial-coverage
-  caveat shown on the site (e.g. "until 14:00").
+  State is the on-duty name(s), or `"none"` if today's schedule has a gap
+  right now. A `note` attribute carries any partial-coverage caveat shown
+  on the site (e.g. "until 14:00").
 - `sensor.next_expiring_qualification` — days remaining until your
   soonest-expiring license/qualification/medical item (negative if already
   past due). A `severity` attribute is `ok` (>30 days or never expires),
   `info` (≤30 days), `warning` (≤14 days), or `issue` (past due), with
   `label`, `subcode`, and `end_date` attributes for the specific item.
+
+Both of these keep showing their last known value if a poll can't confirm
+the current status (e.g. a transient hiccup fetching or parsing the
+calendar/qualification page) instead of blanking out — they only go
+`unavailable` if the very first fetch after startup fails.
 
 Polled every 15 minutes. The tower-duty and qualification-status fetches
 share the same login session as the aircraft data — enabling them doesn't

@@ -42,6 +42,20 @@ class InvalidAuth(Exception):
     """Raised when the site rejects the configured credentials."""
 
 
+class ParseError(Exception):
+    """Raised when a successfully-fetched page doesn't have the structure we
+
+    expect to parse (e.g. a calendar page that doesn't cover today, or a
+    qualification page missing its status table). This is distinct from the
+    parser's normal "no data" results (nobody on duty right now, no
+    qualification is close to expiring) — those are real answers, not
+    failures, and are returned as data rather than raised. Raising here
+    (instead of returning None as data) lets the coordinator treat it as a
+    failed update, so it keeps the last known-good value instead of
+    overwriting it with blank data.
+    """
+
+
 class AirportSoftwareClient:
     def __init__(
         self,
@@ -84,7 +98,7 @@ class AirportSoftwareClient:
             for status in statuses
         ]
 
-    async def async_get_tower_duty(self, now: dt.datetime) -> TowerDutyStatus | None:
+    async def async_get_tower_duty(self, now: dt.datetime) -> TowerDutyStatus:
         if self._auth_failed:
             raise InvalidAuth("airport-software previously rejected these credentials")
         if not self._authenticated:
@@ -95,18 +109,24 @@ class AirportSoftwareClient:
         if _FLUGLTG_SELECTED_MARKER not in page_html:
             page_html = await self._async_select_flugleitung_calendar(page_html)
 
-        return parse_tower_duty(page_html, now)
+        duty = parse_tower_duty(page_html, now)
+        if duty is None:
+            raise ParseError("could not find today's date on the Flugleitung calendar page")
+        return duty
 
     async def async_get_next_expiring_qualification(
         self, today: dt.date
-    ) -> QualificationStatus | None:
+    ) -> QualificationStatus:
         if self._auth_failed:
             raise InvalidAuth("airport-software previously rejected these credentials")
         if not self._authenticated:
             await self._async_login()
 
         page_html = await self._async_fetch_with_relogin(_MYCODE_PATH)
-        return parse_qualification_status(page_html, today)
+        qualification = parse_qualification_status(page_html, today)
+        if qualification is None:
+            raise ParseError("could not find the qualification status table on the mycode page")
+        return qualification
 
     async def _async_select_flugleitung_calendar(self, page_html: str) -> str:
         url = f"{self._base_url}{_KALENDER_PATH}"

@@ -61,7 +61,7 @@ class TowerDutyCoordinator(DataUpdateCoordinator[TowerDutyStatus | None]):
         self.config_entry = entry
         self._client = client
 
-    async def _async_update_data(self) -> TowerDutyStatus | None:
+    async def _async_update_data(self) -> TowerDutyStatus:
         try:
             return await self._client.async_get_tower_duty(dt_util.now())
         except InvalidAuth as err:
@@ -88,7 +88,7 @@ class QualificationCoordinator(DataUpdateCoordinator[QualificationStatus | None]
         self.config_entry = entry
         self._client = client
 
-    async def _async_update_data(self) -> QualificationStatus | None:
+    async def _async_update_data(self) -> QualificationStatus:
         try:
             return await self._client.async_get_next_expiring_qualification(dt_util.now().date())
         except InvalidAuth as err:

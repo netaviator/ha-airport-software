@@ -6,7 +6,7 @@ from aioresponses import aioresponses
 from yarl import URL as YarlURL
 
 from tests.conftest import load_fixture
-from custom_components.airport_software.client import AirportSoftwareClient, InvalidAuth
+from custom_components.airport_software.client import AirportSoftwareClient, InvalidAuth, ParseError
 from custom_components.airport_software.models import TowerDutyStatus, QualificationStatus
 
 BASE_URL = "https://example.test"
@@ -208,6 +208,45 @@ async def test_async_get_tower_duty_skips_switch_when_already_selected():
             result = await client.async_get_tower_duty(dt.datetime(2026, 1, 14, 10, 0))
 
     assert result == TowerDutyStatus(on_duty="Mustermann, Erika", note=None)
+
+
+async def test_async_get_tower_duty_raises_parse_error_when_date_not_on_page():
+    """A page fetch that succeeds but doesn't cover `now`'s date (e.g. the
+
+    calendar view momentarily rendered a different month) must not be
+    mistaken for real "nobody on duty" data -- it has to surface as a
+    failed update so the coordinator keeps the last known-good value
+    instead of overwriting it with blank data.
+    """
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+    correct_page = load_fixture("kalender.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(KALENDER_URL, body=correct_page)
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            with pytest.raises(ParseError):
+                # kalender.html only covers January 14-15, 2026.
+                await client.async_get_tower_duty(dt.datetime(2026, 1, 16, 10, 0))
+
+
+async def test_async_get_next_expiring_qualification_raises_parse_error_when_table_missing():
+    login_page = load_fixture("login_page.html")
+    login_success = load_fixture("login_response_success.html")
+
+    with aioresponses() as mocked:
+        mocked.get(LOGIN_URL, body=login_page)
+        mocked.post(LOGIN_URL, body=login_success)
+        mocked.get(MYCODE_URL, body="<html><body>no qualification table here</body></html>")
+
+        async with aiohttp.ClientSession() as session:
+            client = AirportSoftwareClient(session, BASE_URL, "1234", "secret")
+            with pytest.raises(ParseError):
+                await client.async_get_next_expiring_qualification(dt.date(2026, 1, 1))
 
 
 async def test_async_get_next_expiring_qualification_returns_parsed_result():

@@ -92,6 +92,40 @@ async def test_tower_duty_sensor_absent_when_disabled(hass):
     assert hass.states.get("sensor.tower_duty_now") is None
 
 
+async def test_tower_duty_sensor_keeps_last_value_on_transient_failure(hass):
+    """A later poll that can't determine duty status must not blank the
+
+    entity -- it should keep showing the last known value rather than
+    flipping to unknown/unavailable, since the underlying data (who's on
+    duty) hasn't actually changed just because one poll failed to confirm it.
+    """
+    duty = TowerDutyStatus(on_duty="Rey, Elena", note=None)
+    entry = MockConfigEntry(domain=DOMAIN, data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.airport_software.client.AirportSoftwareClient.async_get_status",
+        return_value=[],
+    ), patch(
+        "custom_components.airport_software.client.AirportSoftwareClient.async_get_tower_duty",
+        side_effect=[duty, ConnectionError("boom")],
+    ), patch(
+        "custom_components.airport_software.client.AirportSoftwareClient.async_get_next_expiring_qualification",
+        return_value=None,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        assert hass.states.get("sensor.tower_duty_now").state == "Rey, Elena"
+
+        tower_duty_coordinator = hass.data[DOMAIN][entry.entry_id]["tower_duty_coordinator"]
+        await tower_duty_coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+    state = hass.states.get("sensor.tower_duty_now")
+    assert state.state == "Rey, Elena"
+
+
 async def test_qualification_sensor_absent_when_disabled(hass):
     entry = MockConfigEntry(
         domain=DOMAIN, data={**ENTRY_DATA, "enable_qualification_status": False}
