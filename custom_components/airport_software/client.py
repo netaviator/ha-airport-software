@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from dataclasses import replace
 
 import aiohttp
@@ -15,6 +16,8 @@ from .parsing import (
     parse_tower_duty,
 )
 from .models import AircraftStatus, QualificationStatus, TowerDutyStatus
+
+_LOGGER = logging.getLogger(__name__)
 
 _LOGIN_PATH = "/login/login.aspx"
 _OVERVIEW_PATH = "/internal/booking_overview.aspx"
@@ -111,6 +114,7 @@ class AirportSoftwareClient:
 
         duty = parse_tower_duty(page_html, now)
         if duty is None:
+            _LOGGER.debug("Flugleitung calendar page that failed to parse: %s", page_html)
             raise ParseError("could not find today's date on the Flugleitung calendar page")
         return duty
 
@@ -125,6 +129,7 @@ class AirportSoftwareClient:
         page_html = await self._async_fetch_with_relogin(_MYCODE_PATH)
         qualification = parse_qualification_status(page_html, today)
         if qualification is None:
+            _LOGGER.debug("mycode page that failed to parse: %s", page_html)
             raise ParseError("could not find the qualification status table on the mycode page")
         return qualification
 
